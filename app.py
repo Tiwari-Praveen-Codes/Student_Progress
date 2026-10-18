@@ -1,6 +1,7 @@
 import os
 import json
 import sqlite3
+import time
 from datetime import date, datetime
 import pandas as pd
 import streamlit as st
@@ -412,9 +413,15 @@ with st.sidebar:
     st.metric("Sync Queue", f"{sync_stat['pending_operations']} pending")
     if sync_stat["pending_operations"] > 0:
         if st.button("⬆ Sync Now", key="sb_sync"):
-            ok, msg, _ = sync_engine.process_sync_queue()
-            st.success(msg) if ok else st.error(msg)
-            st.rerun()
+            with st.spinner("Pushing changes to Google Sheets..."):
+                ok, msg, _ = sync_engine.process_sync_queue()
+            if ok:
+                st.toast(msg, icon="✅")
+                st.success(msg)
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error(msg)
 
     st.markdown("<br><div style='font-size:.7rem;color:#475569;text-align:center'>v2.1 · Google Sheets Sync · Plotly Charts</div>", unsafe_allow_html=True)
 
@@ -1047,51 +1054,108 @@ elif page == "☁️ Google Sheets Sync":
     d4.metric("Last Sync",     status["last_full_sync"] or "Never")
 
     st.markdown("---")
-    sc1, sc2 = st.columns([1, 1])
+    
+    wh_tab, sa_tab = st.tabs([
+        "⚡ Apps Script Webhook Sync (Active & Zero-Cloud)",
+        "🔑 Service Account JSON (`gspread`)"
+    ])
 
-    with sc1:
-        st.markdown("#### ⚙️ Settings")
-        curr_id = sync_engine.get_configured_sheet_id()
-        new_id  = st.text_input("Google Spreadsheet ID", value=curr_id,
-                                placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")
-        auto_on = st.toggle("Auto-sync on every DB change", value=status["auto_sync"])
-        if st.button("Save Settings"):
-            sync_engine.set_configured_sheet_id(new_id)
-            sync_engine.set_auto_sync_enabled(auto_on)
-            st.success("Saved!"); st.rerun()
-
-        st.markdown("#### 🚀 Controls")
-        b1, b2 = st.columns(2)
-        if b1.button("Process Queue", type="primary"):
-            ok, msg, cnt = sync_engine.process_sync_queue()
-            st.success(msg) if ok else st.error(msg)
-            if ok: st.rerun()
-        if b2.button("Full Refresh"):
-            ok, msg, cnt = sync_engine.full_refresh_sync()
-            st.success(msg) if ok else st.error(msg)
-            if ok: st.rerun()
-
-        st.markdown("#### 🧪 Local Verification Test")
-        st.caption("Tests INSERT → UPDATE → DELETE queue capture with payload snapshots.")
-        if st.button("Run Verification Test"):
-            res = sync_engine.run_mock_sync_simulation()
-            st.success(res["message"])
+    with wh_tab:
+        st.markdown("#### ⚡ Real-Time Google Sheets Webhook Sync")
+        st.caption("Pushes all SQLite 3NF tables directly to Google Sheets using a secure Apps Script Webhook.")
+        
+        cfg_m = mysql_manager.load_mysql_config()
+        active_wh = cfg_m.get("webhook_url", "").strip()
+        
+        wh_input = st.text_input("Active Webhook URL", value=active_wh, placeholder="https://script.google.com/macros/s/.../exec", key="gs_webhook_url")
+        if wh_input != active_wh and st.button("💾 Save Webhook URL"):
+            cfg_m["webhook_url"] = wh_input.strip()
+            mysql_manager.save_mysql_config(cfg_m)
+            st.success("Webhook URL saved!")
             st.rerun()
 
-    with sc2:
-        st.markdown("#### 📋 Setup Guide")
-        steps = [
-            ("1. Create Cloud Project", "Go to [Google Cloud Console](https://console.cloud.google.com/) and create a project."),
-            ("2. Enable APIs", "Enable **Google Sheets API** and **Google Drive API**."),
-            ("3. Service Account", "Go to **IAM & Admin → Service Accounts → Create → JSON Key**. Save as `service_account.json` in this folder."),
-            ("4. Share Spreadsheet", f"Create a Google Sheet and share it as **Editor** with the service account email below."),
-            ("5. Set Sheet ID", "Paste the spreadsheet ID (from the URL) in the Settings panel on the left."),
-        ]
-        for title, detail in steps:
-            with st.expander(title):
-                st.markdown(detail)
-                if title == "4. Share Spreadsheet" and status["client_email"]:
-                    st.code(status["client_email"])
+        c_sync1, c_sync2, c_sync3 = st.columns(3)
+        with c_sync1:
+            if st.button("🚀 Process Pending Queue", type="primary", use_container_width=True):
+                with st.spinner("Processing pending queue changes..."):
+                    ok, msg, cnt = sync_engine.process_sync_queue()
+                if ok:
+                    st.toast(msg, icon="✅")
+                    st.success(f"🎉 {msg}")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(f"❌ {msg}")
+
+        with c_sync2:
+            if st.button("⚡ Force Full Sync (All 8 Tables)", use_container_width=True):
+                with st.spinner("Pushing all 8 tables (1700+ rows) to Google Sheets..."):
+                    ok, msg, cnt = sync_engine.full_refresh_sync()
+                if ok:
+                    st.toast(msg, icon="✅")
+                    st.success(f"🎉 {msg}")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(f"❌ {msg}")
+
+        with c_sync3:
+            if st.button("🧪 Live Demo: Add Test Student & Sync", use_container_width=True):
+                with st.spinner("Inserting demo student and syncing..."):
+                    test_roll = f"VIVA_{int(time.time()) % 10000}"
+                    with db.get_conn() as conn:
+                        conn.execute("""
+                            INSERT INTO students (roll_no, full_name, email, phone, department, admission_year, current_status)
+                            VALUES (?, '✨ Live Viva Sync Test Student', ?, '9820011223', 'Computer', 2024, 'Active')
+                        """, (test_roll, f"sync_test_{test_roll.lower()}@viva-technology.org"))
+                        conn.commit()
+                    ok, msg, _ = sync_engine.process_sync_queue()
+                    if ok:
+                        st.success(f"✅ Added student {test_roll} and successfully synced to Google Sheets!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+    with sa_tab:
+        sc1, sc2 = st.columns([1, 1])
+
+        with sc1:
+            st.markdown("#### ⚙️ Service Account Settings")
+            curr_id = sync_engine.get_configured_sheet_id()
+            new_id  = st.text_input("Google Spreadsheet ID", value=curr_id,
+                                    placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")
+            auto_on = st.toggle("Auto-sync on every DB change", value=status["auto_sync"])
+            if st.button("Save Settings"):
+                sync_engine.set_configured_sheet_id(new_id)
+                sync_engine.set_auto_sync_enabled(auto_on)
+                st.success("Saved!"); st.rerun()
+
+            st.markdown("#### 🚀 Service Account Controls")
+            b1, b2 = st.columns(2)
+            if b1.button("Process Queue (SA)", type="secondary"):
+                ok, msg, cnt = sync_engine.process_sync_queue()
+                st.success(msg) if ok else st.error(msg)
+                if ok: st.rerun()
+            if b2.button("Full Refresh (SA)"):
+                ok, msg, cnt = sync_engine.full_refresh_sync()
+                st.success(msg) if ok else st.error(msg)
+                if ok: st.rerun()
+
+        with sc2:
+            st.markdown("#### 📋 Setup Guide")
+            steps = [
+                ("1. Create Cloud Project", "Go to [Google Cloud Console](https://console.cloud.google.com/) and create a project."),
+                ("2. Enable APIs", "Enable **Google Sheets API** and **Google Drive API**."),
+                ("3. Service Account", "Go to **IAM & Admin → Service Accounts → Create → JSON Key**. Save as `service_account.json` in this folder."),
+                ("4. Share Spreadsheet", f"Create a Google Sheet and share it as **Editor** with the service account email below."),
+                ("5. Set Sheet ID", "Paste the spreadsheet ID (from the URL) in the Settings panel on the left."),
+            ]
+            for title, detail in steps:
+                with st.expander(title):
+                    st.markdown(detail)
+                    if title == "4. Share Spreadsheet" and status["client_email"]:
+                        st.code(status["client_email"])
 
     st.markdown("---")
     st.markdown("#### 📜 Sync Queue Audit Log")

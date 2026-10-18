@@ -152,12 +152,44 @@ def sync_table_to_sheet(sh, table_name: str) -> int:
         ws.update(values, value_input_option="USER_ENTERED")
     return len(rows)
 
+def sync_sqlite_via_webhook(webhook_url: str) -> Tuple[bool, str, int]:
+    """Pushes all 8 SQLite 3NF tables directly to Google Sheets via Google Apps Script Webhook."""
+    import requests
+    tables = [
+        "students", "school_records", "semesters", "subjects",
+        "semester_results", "drop_years", "achievement_categories", "achievements"
+    ]
+    payload_data = {}
+    total_rows = 0
+
+    try:
+        with db.get_conn() as conn:
+            for tbl in tables:
+                cur = conn.cursor()
+                cur.execute(f"SELECT * FROM {tbl}")
+                rows = cur.fetchall()
+                cols = [desc[0] for desc in cur.description]
+                clean_rows = []
+                for row in rows:
+                    clean_rows.append([str(item) if item is not None else "" for item in row])
+                payload_data[tbl] = [cols] + clean_rows
+                total_rows += len(rows)
+
+        resp = requests.post(webhook_url, json={"tables": payload_data}, timeout=35)
+        if resp.status_code == 200:
+            return True, f"Successfully synced {len(tables)} tables ({total_rows} rows) to Google Sheets via Webhook!", total_rows
+        else:
+            return False, f"Google Webhook returned HTTP {resp.status_code}: {resp.text}", 0
+    except Exception as e:
+        return False, f"Google Webhook sync failed: {str(e)}", 0
+
 def process_sync_queue(max_items: int = 50) -> Tuple[bool, str, int]:
     """
     Processes pending items in the sync queue.
     Supports both Google Apps Script Webhook and Google Cloud Service Account.
     """
     webhook_url = ""
+    m_cfg = {}
     try:
         import mysql_manager
         m_cfg = mysql_manager.load_mysql_config()
@@ -177,37 +209,36 @@ def process_sync_queue(max_items: int = 50) -> Tuple[bool, str, int]:
 
     # BRANCH A: Auto-sync via Webhook (Direct Google Sheet Cloud Mirror)
     if webhook_url:
+        ok, msg, rows = sync_sqlite_via_webhook(webhook_url)
+
+        # Optional best-effort MySQL sync (does not block or fail Google Sheets sync if MySQL is offline)
         try:
             m_host = m_cfg.get("host", "localhost")
             m_port = int(m_cfg.get("port", 3306))
             m_user = m_cfg.get("user", "root")
             m_pass = m_cfg.get("password", "")
             m_db   = m_cfg.get("database", "student_progression_db")
-            
-            # Sync SQLite to MySQL so MySQL is always fresh
             mysql_manager.migrate_sqlite_to_mysql(m_host, m_port, m_user, m_pass, m_db)
-            # Push all tables from MySQL to Google Sheets via Webhook
-            ok, msg, rows = mysql_manager.sync_mysql_via_webhook(m_host, m_port, m_user, m_pass, m_db, webhook_url)
-            
-            if ok:
-                item_ids = [item["queue_id"] for item in pending_items]
-                with db.get_conn() as conn:
-                    conn.executemany(
-                        "UPDATE sync_queue SET synced = 1, synced_at = ?, error = NULL WHERE queue_id = ?",
-                        [(now_ts, qid) for qid in item_ids]
-                    )
-                    conn.commit()
-                db.exec_sql(
-                    """INSERT INTO sync_config(config_key, config_value, updated_at)
-                       VALUES('last_full_sync', ?, CURRENT_TIMESTAMP)
-                       ON CONFLICT(config_key) DO UPDATE SET config_value=excluded.config_value, updated_at=CURRENT_TIMESTAMP""",
-                    (now_ts,)
+        except Exception:
+            pass
+
+        if ok:
+            item_ids = [item["queue_id"] for item in pending_items]
+            with db.get_conn() as conn:
+                conn.executemany(
+                    "UPDATE sync_queue SET synced = 1, synced_at = ?, error = NULL WHERE queue_id = ?",
+                    [(now_ts, qid) for qid in item_ids]
                 )
-                return True, f"Automatically synced {len(item_ids)} changes to MySQL and Google Sheets!", len(item_ids)
-            else:
-                return False, f"Webhook sync error: {msg}", 0
-        except Exception as e:
-            return False, f"Auto-sync exception: {str(e)}", 0
+                conn.commit()
+            db.exec_sql(
+                """INSERT INTO sync_config(config_key, config_value, updated_at)
+                   VALUES('last_full_sync', ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT(config_key) DO UPDATE SET config_value=excluded.config_value, updated_at=CURRENT_TIMESTAMP""",
+                (now_ts,)
+            )
+            return True, f"Successfully synced {len(item_ids)} change(s) ({rows} rows) to Google Sheets!", len(item_ids)
+        else:
+            return False, f"Webhook sync error: {msg}", 0
 
     # BRANCH B: Service Account via gspread
     sheet_id = get_configured_sheet_id()
@@ -261,8 +292,31 @@ def process_sync_queue(max_items: int = 50) -> Tuple[bool, str, int]:
 def full_refresh_sync() -> Tuple[bool, str, int]:
     """
     Performs a complete one-way push of all database tables to individual Google Sheet tabs.
-    Also syncs the sync_queue audit log.
+    Works seamlessly with Webhook URL or Service Account.
     """
+    webhook_url = ""
+    try:
+        import mysql_manager
+        m_cfg = mysql_manager.load_mysql_config()
+        webhook_url = m_cfg.get("webhook_url", "").strip()
+    except Exception:
+        pass
+
+    if webhook_url:
+        ok, msg, count = sync_sqlite_via_webhook(webhook_url)
+        if ok:
+            now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with db.get_conn() as conn:
+                conn.execute("UPDATE sync_queue SET synced = 1, synced_at = ?, error = NULL WHERE synced = 0", (now_ts,))
+                conn.commit()
+            db.exec_sql(
+                """INSERT INTO sync_config(config_key, config_value, updated_at)
+                   VALUES('last_full_sync', ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT(config_key) DO UPDATE SET config_value=excluded.config_value, updated_at=CURRENT_TIMESTAMP""",
+                (now_ts,)
+            )
+        return ok, msg, count
+
     sheet_id = get_configured_sheet_id()
     creds_path = get_credentials_path()
 
