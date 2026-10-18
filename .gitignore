@@ -1,0 +1,28 @@
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Sensitive Google Credentials & Keys
+*.json
+!tests/mock_service_account.json
+service_account*.json
+credentials*.json
+client_secret*.json
+.env
+.env.*
+
+# Streamlit
+.streamlit/secrets.toml
+
+# SQLite databases (optional local run databases)
+*.db-journal
+
+# Binaries
+cloudflared.exe
