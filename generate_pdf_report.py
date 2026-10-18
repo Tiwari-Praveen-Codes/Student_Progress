@@ -171,28 +171,36 @@ def build_pdf(filename="USER_AND_TECHNICAL_REPORT.pdf"):
     story = []
 
     # ------------------ COVER / TITLE BLOCK ------------------
-    badge_data = [[
-        Paragraph("<b>COURSE:</b> Database Management Systems (DBMS)", td_style),
-        Paragraph("<b>INSTITUTION:</b> VIVA Institute of Technology", td_style),
-        Paragraph("<b>STATUS:</b> Fully Operational & Verified", td_style)
-    ]]
+    badge_data = [
+        [
+            Paragraph("<b>COURSE:</b> DBMS Mini-Project (2025-26)", td_style),
+            Paragraph("<b>INSTITUTION:</b> VIVA Institute of Technology", td_style),
+            Paragraph("<b>STATUS:</b> Live & Operational", td_style)
+        ],
+        [
+            Paragraph("<b>LIVE WEB APP:</b> <a href='https://studentprogressgit.streamlit.app/' color='#2563EB'><u>studentprogressgit.streamlit.app</u></a>", td_style),
+            Paragraph("<b>GITHUB REPO:</b> <a href='https://github.com/Tiwari-Praveen-Codes/Student_Progress' color='#2563EB'><u>Tiwari-Praveen-Codes/Student_Progress</u></a>", td_style),
+            Paragraph("<b>DATABASE:</b> SQLite 3NF + MySQL 8.0", td_style)
+        ]
+    ]
     badge_table = Table(badge_data, colWidths=[170, 190, 144])
     badge_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#EFF6FF")),
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#93C5FD")),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#BFDBFE")),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
-        ('LEFTPADDING', (0,0), (-1,-1), 8),
-        ('RIGHTPADDING', (0,0), (-1,-1), 8),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('LEFTPADDING', (0,0), (-1,-1), 7),
+        ('RIGHTPADDING', (0,0), (-1,-1), 7),
     ]))
 
     story.append(badge_table)
     story.append(Spacer(1, 10))
 
     story.append(Paragraph("Student Academic Progression & Portfolio Management System", title_style))
-    story.append(Paragraph("<b>Comprehensive User Operational Guide & Technical Architecture Report</b><br/>"
-                           "Covering GUI Workflows, Multi-Database Synchronization, Record Modification, and Schema Constraint Enforcement.", subtitle_style))
+    story.append(Paragraph("<b>Comprehensive User & Technical Deliverables Report</b><br/>"
+                           "Operational Guide (GUI & Sync Feature), Record Modification Protocol, and Schema Constraint Enforcement.", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.5, color=NAVY, spaceAfter=10))
 
     # ------------------ SECTION 1: SYSTEM OVERVIEW & ARCHITECTURE ------------------
@@ -251,7 +259,7 @@ def build_pdf(filename="USER_AND_TECHNICAL_REPORT.pdf"):
     ))
 
     gui_steps = [
-        ("Step 1: Launch Application", "Run the local runner (<code>run_app.bat</code> or <code>streamlit run app.py</code>) or open the deployed Streamlit Cloud URL. The app opens directly to the <b>Dashboard & Overview</b>."),
+        ("Step 1: Launch Application", "Access the live web application on any device via <b><a href='https://studentprogressgit.streamlit.app/' color='#2563EB'>https://studentprogressgit.streamlit.app/</a></b> (or run locally via <code>streamlit run app.py</code>). The system is fully responsive on PC, Mac, iPad, tablet, Android, and iOS devices, opening directly to the <b>Dashboard & Analytics</b> overview."),
         ("Step 2: Filter & Search Students", "Navigate to <b>Students Directory</b>. Use the dynamic text box to search by Roll Number or Name. Filter by Department (Computer, AIML, Data Science, IT, EXTC, Mechanical) or Status (Active, Graduated, Drop)."),
         ("Step 3: Inspect Academic Progression", "Select a student in <b>Progression & SGPA</b>. The system renders an interactive dual-line Plotly chart graphing Term SGPA versus Cumulative CGPA across Semesters 1 to 8. A summary grade card displays credits earned."),
         ("Step 4: View Drop-Year Audit Alerts", "Click <b>Drop-Year Tracking</b>. If a student experienced an academic gap, the system calculates gap duration in years, displays the approved rationale, and highlights a high-visibility amber alert badge."),
@@ -483,8 +491,15 @@ def build_pdf(filename="USER_AND_TECHNICAL_REPORT.pdf"):
     # ------------------ SIGN-OFF BLOCK ------------------
     sign_data = [
         [
-            Paragraph("<b>Deliverable Certification:</b><br/>All source code, database schemas, responsive CSS, and cloud pipelines have been verified and pushed to GitHub: <code>https://github.com/Tiwari-Praveen-Codes/Student_Progress</code>", td_style),
-            Paragraph("<b>Viva Evaluation:</b><br/>Status: <b>Ready for Examination</b><br/>Date: <b>Academic Term 2025-2026</b>", td_style)
+            Paragraph("<b>Deliverable Certification:</b><br/>"
+                      "• <b>Live Website:</b> <a href='https://studentprogressgit.streamlit.app/' color='#2563EB'><u>https://studentprogressgit.streamlit.app/</u></a><br/>"
+                      "• <b>GitHub Repository:</b> <a href='https://github.com/Tiwari-Praveen-Codes/Student_Progress' color='#2563EB'><u>Tiwari-Praveen-Codes/Student_Progress</u></a><br/>"
+                      "• <b>Google Sheets Mirror:</b> Verified HTTP 200 via Apps Script Webhook Pipeline.", td_style),
+            Paragraph("<b>Viva Evaluation:</b><br/>"
+                      "• <b>Status:</b> Production Ready<br/>"
+                      "• <b>Branches Covered:</b> 6 Departments<br/>"
+                      "• <b>Dataset:</b> 105 Real Unique Students<br/>"
+                      "• <b>Academic Term:</b> 2025-2026", td_style)
         ]
     ]
     sign_table = Table(sign_data, colWidths=[330, 174])
